@@ -445,6 +445,8 @@ export function filterCommandPaletteGroups(input: {
   projectSearchItems: ReadonlyArray<CommandPaletteActionItem>;
   settingsSearchItems?: ReadonlyArray<CommandPaletteActionItem>;
   threadSearchItems: ReadonlyArray<CommandPaletteActionItem>;
+  /** More groups that only appear while searching, after the built-in ones. */
+  extraSearchGroups?: ReadonlyArray<CommandPaletteGroup>;
 }): CommandPaletteGroup[] {
   const isActionsFilter = input.query.startsWith(">");
   const searchQuery = isActionsFilter ? input.query.slice(1) : input.query;
@@ -488,6 +490,7 @@ export function filterCommandPaletteGroups(input: {
         items: input.threadSearchItems,
       });
     }
+    searchableGroups.push(...(input.extraSearchGroups ?? []));
   }
 
   return searchableGroups.flatMap((group) => {

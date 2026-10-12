@@ -123,6 +123,7 @@ import * as ThreadLaunchService from "./orchestration-v2/ThreadLaunchService.ts"
 import * as ThreadMessageIntake from "./orchestration-v2/ThreadMessageIntake.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
+import * as NotesService from "./notes/NotesService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import {
   archivedShellStreamItemFromThreadShell,
@@ -1225,6 +1226,7 @@ const layerWsRpc = (
       const threadLaunch = yield* ThreadLaunchService.ThreadLaunchService;
       const providerSessionManager = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
+      const notes = yield* NotesService.NotesService;
       const secretRequests = yield* SecretRequests.SecretRequests;
       const pullRequests = yield* PullRequestService.PullRequestService;
       const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
@@ -2051,6 +2053,15 @@ const layerWsRpc = (
               Effect.andThen(subscribeOrchestrationV2Thread(input)),
             ),
           ),
+        [WS_METHODS.notesList]: (input) => notes.list(input.scope),
+        [WS_METHODS.notesSubscribe]: (input) => notes.subscribe(input.scope),
+        [WS_METHODS.notesRead]: (input) => notes.read(input.id),
+        [WS_METHODS.notesCreate]: (input) => notes.create(input),
+        [WS_METHODS.notesWrite]: (input) => notes.write(input),
+        [WS_METHODS.notesRename]: (input) => notes.rename(input),
+        [WS_METHODS.notesMove]: (input) => notes.move(input),
+        [WS_METHODS.notesDelete]: (input) => notes.delete(input.id).pipe(Effect.as({})),
+        [WS_METHODS.notesSubscribeThreadsWithNotes]: (_input) => notes.subscribeThreadsWithNotes(),
         [WS_METHODS.scheduledTasksList]: (_input) =>
           scheduledTasks.list().pipe(Effect.map(withVisibleWebhookUrls)),
         [WS_METHODS.scheduledTasksSubscribe]: (_input) =>

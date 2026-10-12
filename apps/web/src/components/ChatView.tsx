@@ -289,6 +289,7 @@ import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavaila
 import { RightPanelTabs } from "./RightPanelTabs";
 import { LinkPullRequestDialogHost } from "./pullRequest/LinkPullRequestDialog";
 import { ThreadPullRequestsPanel } from "./pullRequest/ThreadPullRequestsPanel";
+import { NotesPanel } from "./notes/NotesPanel";
 import { useDeviceState } from "~/state/device";
 import { DeviceSetup } from "./device/DeviceSetup";
 import { Dialog } from "./ui/dialog";
@@ -5459,6 +5460,11 @@ export default function ChatView(props: ChatViewProps) {
     if (!activeThreadRef || !activeProject) return;
     useRightPanelStore.getState().open(activeThreadRef, "files");
   }, [activeProject, activeThreadRef]);
+  const notesAvailable = isServerThread && serverConfig?.environment.capabilities.notes === true;
+  const addNotesSurface = useCallback(() => {
+    if (!activeThreadRef || !notesAvailable) return;
+    useRightPanelStore.getState().open(activeThreadRef, "notes");
+  }, [activeThreadRef, notesAvailable]);
   const supportsThreadPullRequests =
     serverConfig?.environment.capabilities.threadPullRequests === true;
   const visiblePullRequests = visibleThreadPullRequests(
@@ -8231,6 +8237,14 @@ export default function ChatView(props: ChatViewProps) {
         return;
       }
 
+      if (command === "notes.toggle") {
+        if (!activeThreadRef || !notesAvailable) return;
+        event.preventDefault();
+        event.stopPropagation();
+        useRightPanelStore.getState().toggle(activeThreadRef, "notes");
+        return;
+      }
+
       if (command === "modelPicker.toggle") {
         event.preventDefault();
         event.stopPropagation();
@@ -8367,6 +8381,7 @@ export default function ChatView(props: ChatViewProps) {
     serverConfig?.threadFind,
     onInterrupt,
     onToggleDiff,
+    notesAvailable,
     pinThread,
     settleThread,
     supportsPinning,
@@ -11175,6 +11190,12 @@ export default function ChatView(props: ChatViewProps) {
       />
     ) : renderedRightPanelSurface?.kind === "pull-requests" && activeThreadRef ? (
       <ThreadPullRequestsPanel threadRef={activeThreadRef} />
+    ) : renderedRightPanelSurface?.kind === "notes" && activeThreadRef ? (
+      <NotesPanel
+        threadRef={activeThreadRef}
+        projectId={activeThread.projectId}
+        cwd={activeWorkspaceRoot}
+      />
     ) : renderedRightPanelSurface?.kind === "device" ? (
       <Suspense fallback={null}>
         <DevicePanel
@@ -12064,6 +12085,8 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequest={addPullRequestSurface}
           onAddPullRequests={addPullRequestsSurface}
           onAddDevice={addDeviceSurface}
+          onAddNotes={addNotesSurface}
+          notesAvailable={notesAvailable}
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={activeProject !== null && canOperateTerminal}
           diffAvailable={isServerThread && isGitRepo}
@@ -12123,6 +12146,8 @@ export default function ChatView(props: ChatViewProps) {
             onAddPullRequest={addPullRequestSurface}
             onAddPullRequests={addPullRequestsSurface}
             onAddDevice={addDeviceSurface}
+            onAddNotes={addNotesSurface}
+            notesAvailable={notesAvailable}
             browserAvailable={canOperatePreview && browserAvailable}
             terminalAvailable={activeProject !== null && canOperateTerminal}
             diffAvailable={isServerThread && isGitRepo}

@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { GitPreparePullRequestThreadInput } from "./git.ts";
 import {
+  AuthFilesystemWriteScope,
   AuthOrchestrationOperateScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
@@ -47,6 +48,11 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.scheduledTasksRunNow]: AuthOrchestrationOperateScope,
   [WS_METHODS.scheduledTasksRotateWebhookToken]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
+  [WS_METHODS.notesCreate]: AuthFilesystemWriteScope,
+  [WS_METHODS.notesWrite]: AuthFilesystemWriteScope,
+  [WS_METHODS.notesRename]: AuthFilesystemWriteScope,
+  [WS_METHODS.notesMove]: AuthFilesystemWriteScope,
+  [WS_METHODS.notesDelete]: AuthFilesystemWriteScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 

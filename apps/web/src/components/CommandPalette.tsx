@@ -59,6 +59,7 @@ import * as Option from "effect/Option";
 import {
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
+  LayoutListIcon,
   CheckIcon,
   ChevronRightIcon,
   CornerLeftUpIcon,
@@ -130,7 +131,14 @@ import { useScratchProject } from "../hooks/useScratchProject";
 import { useNewProject } from "../hooks/useNewProject";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
-import { useProjects, useServerConfigs, useThreadShells, waitForProject } from "../state/entities";
+import {
+  readThreadShell,
+  useProjects,
+  useServerConfigs,
+  useThreadShells,
+  waitForProject,
+} from "../state/entities";
+import { useCreateScratchNote, useNoteCommandPaletteItems } from "./notes/notesCommands";
 import { useThreadSearch } from "../state/queries";
 import { resolveThreadActionProjectRef, startNewThreadFromContext } from "../lib/chatThreadActions";
 import {
@@ -394,6 +402,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     select: (params) => resolveThreadRouteTarget(params),
   });
   const routeThreadRef = routeTarget?.kind === "server" ? routeTarget.threadRef : null;
+  const createScratchNote = useCreateScratchNote();
   const terminalOpen = useTerminalUiStateStore((state) =>
     routeThreadRef
       ? selectThreadTerminalUiState(state.terminalUiStateByThreadKey, routeThreadRef).terminalOpen
@@ -472,6 +481,24 @@ export function CommandPalette({ children }: { children: ReactNode }) {
         void navigate({ to: "/usage" });
         return;
       }
+      if (command === "notes.new") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat) return;
+        setOpen(false);
+        void createScratchNote({
+          activeThread: routeThreadRef ? readThreadShell(routeThreadRef) : null,
+          fallbackProjectRef: null,
+        });
+        return;
+      }
+      if (command === "sessions.open") {
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(false);
+        void navigate({ to: "/sessions" });
+        return;
+      }
       const mode = overlayModeForCommand(command);
       if (mode === null) {
         return;
@@ -484,6 +511,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     appearanceMode,
+    createScratchNote,
     keybindings,
     navigate,
     previewOpen,
@@ -1804,6 +1832,11 @@ function OpenCommandPaletteDialog(props: {
   }, [clearOpenIntent, browseNavigation, openIntent, projectThreadItems, pushPaletteView]);
 
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
+  const noteCommandPalette = useNoteCommandPaletteItems({
+    activeThread: activeThread ?? null,
+    fallbackProjectRef: defaultProjectRef ?? null,
+    iconClassName: ITEM_ICON_CLASS,
+  });
 
   if (projects.length > 0) {
     const activeProjectTitle =
@@ -2235,6 +2268,18 @@ function OpenCommandPaletteDialog(props: {
 
   actionItems.push({
     kind: "action",
+    value: "action:sessions",
+    searchTerms: ["sessions", "threads", "overview", "running", "working", "status", "agents"],
+    title: "Open sessions overview",
+    icon: <LayoutListIcon className={ITEM_ICON_CLASS} />,
+    shortcutCommand: "sessions.open",
+    run: async () => {
+      await navigate({ to: "/sessions" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
     value: "action:settings",
     searchTerms: ["settings", "preferences", "configuration", "keybindings"],
     title: "Open settings",
@@ -2282,6 +2327,8 @@ function OpenCommandPaletteDialog(props: {
     });
   }
 
+  actionItems.push(...noteCommandPalette.actionItems);
+
   const rootGroups = buildRootGroups({ actionItems, recentThreadItems });
   const settingsSearchItems: CommandPaletteActionItem[] = searchSettings(
     deferredQuery,
@@ -2325,6 +2372,7 @@ function OpenCommandPaletteDialog(props: {
     isInSubmenu: currentView !== null,
     projectSearchItems: projectSearchItems,
     settingsSearchItems,
+    extraSearchGroups: noteCommandPalette.searchGroups,
     threadSearchItems:
       linkedThreadSearch?.linkedThreads && deferredQuery === linkedThreadSearch.query
         ? buildLinkedThreadActionItems({
