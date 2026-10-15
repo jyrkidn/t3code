@@ -20,6 +20,7 @@ import { useAtomCommand } from "./state/use-atom-command";
 import { readEnvironmentScope } from "./state/session";
 
 const LAST_EDITOR_KEY = "t3code:last-editor";
+const FILE_LINKS_OPEN_IN_EDITOR_KEY = "t3code:file-links-open-in-editor";
 
 export class PreferredEditorEnvironmentRequiredError extends Schema.TaggedError<PreferredEditorEnvironmentRequiredError>()(
   "PreferredEditorEnvironmentRequiredError",
@@ -54,6 +55,16 @@ export function usePreferredEditor(availableEditors: ReadonlyArray<EditorId>) {
   }, [lastEditor, availableEditors]);
 
   return [effectiveEditor, setLastEditor] as const;
+}
+
+/** Whether clicking a file link in chat or the terminal may open the preferred
+    editor. Explicit "Open in" actions ignore this. */
+export function useFileLinksOpenInEditor() {
+  return useLocalStorage(FILE_LINKS_OPEN_IN_EDITOR_KEY, true, Schema.Boolean);
+}
+
+export function readFileLinksOpenInEditor(): boolean {
+  return getLocalStorageItem(FILE_LINKS_OPEN_IN_EDITOR_KEY, Schema.Boolean) ?? true;
 }
 
 function resolveAndPersistPreferredEditor(availableEditors: readonly EditorId[]): EditorId | null {

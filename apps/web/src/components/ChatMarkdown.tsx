@@ -145,6 +145,7 @@ import { stackedThreadToast, toastManager } from "./ui/toast";
 import { recordVisitForThread } from "../browserHistoryStore";
 import {
   PreferredEditorEnvironmentRequiredError,
+  useFileLinksOpenInEditor,
   useOpenInPreferredEditor,
   usePreferredEditor,
 } from "../editorPreferences";
@@ -1212,6 +1213,8 @@ interface MarkdownFileLinkProps {
   theme: "light" | "dark";
   threadRef?: ScopedThreadRef | undefined;
   onOpen?: ((targetPath: string) => Promise<AtomCommandResult<unknown, unknown>>) | undefined;
+  /** False keeps clicks out of the editor; the context menu still offers it. */
+  openFileLinksInEditor: boolean;
   onOpenInPanel: (panelPath: string, line: number | undefined) => void;
   openInEditorMenuLabel: string;
   onOpenInBrowser?: (() => Promise<AtomCommandResult<unknown, unknown>>) | undefined;
@@ -1961,6 +1964,7 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
   theme,
   threadRef,
   onOpen,
+  openFileLinksInEditor,
   onOpenInPanel,
   openInEditorMenuLabel,
   onOpenInBrowser,
@@ -2015,8 +2019,16 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
       onOpenMedia();
       return;
     }
-    handleOpenInEditor();
-  }, [handleOpenInEditor, line, onOpenInPanel, onOpenMedia, panelPath, threadRef]);
+    if (openFileLinksInEditor) handleOpenInEditor();
+  }, [
+    handleOpenInEditor,
+    line,
+    onOpenInPanel,
+    onOpenMedia,
+    openFileLinksInEditor,
+    panelPath,
+    threadRef,
+  ]);
 
   const handleOpenInBrowser = useCallback(() => {
     if (!onOpenInBrowser) {
@@ -2244,7 +2256,7 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                if (onOpen && shouldOpenMarkdownFileLinkInEditor(event)) {
+                if (onOpen && openFileLinksInEditor && shouldOpenMarkdownFileLinkInEditor(event)) {
                   handleOpenInEditor();
                   return;
                 }
@@ -2414,6 +2426,7 @@ function useChatMarkdownState({
   const projects = useProjects();
   const availableEditors = serverConfig?.availableEditors ?? [];
   const [preferredEditor] = usePreferredEditor(availableEditors);
+  const [openFileLinksInEditor] = useFileLinksOpenInEditor();
   const preferredEditorMenuLabel = openInEditorMenuLabel(preferredEditor);
   const openInPreferredEditor = useOpenInPreferredEditor(environmentId, availableEditors);
   const openInEditor = useAtomCommand(shellEnvironment.openInEditor, {
@@ -2693,6 +2706,7 @@ function useChatMarkdownState({
           theme={resolvedTheme}
           threadRef={threadRef}
           {...(canUseShellActions ? { onOpen: openInPreferredEditor } : {})}
+          openFileLinksInEditor={openFileLinksInEditor}
           onOpenInPanel={openFileInPanel}
           onOpenMedia={
             threadRef && canPreviewMedia
@@ -2723,6 +2737,7 @@ function useChatMarkdownState({
       environmentId,
       fileLinkParentSuffixByPath,
       openFileInPanel,
+      openFileLinksInEditor,
       openInPreferredEditor,
       openMarkdownFileInPreview,
       openMarkdownMedia,

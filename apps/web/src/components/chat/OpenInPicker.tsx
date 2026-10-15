@@ -8,7 +8,7 @@ import {
 } from "@t3tools/contracts";
 import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { isOpenFavoriteEditorShortcut, shortcutLabelForCommand } from "../../keybindings";
-import { usePreferredEditor } from "../../editorPreferences";
+import { useFileLinksOpenInEditor, usePreferredEditor } from "../../editorPreferences";
 import { editorLabelForPlatform } from "../../editorLabels";
 import {
   openRemoteEditorUrl,
@@ -22,9 +22,11 @@ import { ChevronDownIcon, FolderClosedIcon, SquareArrowOutUpRightIcon } from "lu
 import { Group, GroupSeparator } from "../ui/group";
 import {
   Menu,
+  MenuCheckboxItem,
   MenuItem,
   MenuItemLabel,
   MenuPopup,
+  MenuSeparator,
   MenuShortcut,
   MenuSub,
   MenuSubTrigger,
@@ -238,6 +240,7 @@ export const OpenInPicker = memo(function OpenInPicker({
   // the viewing machine, which only the desktop app can probe.
   const effectiveEditors = remote.mode === "local-exec" ? availableEditors : remoteCapableEditors;
   const [preferredEditor, setPreferredEditor] = usePreferredEditor(effectiveEditors);
+  const [openFileLinksInEditor, setOpenFileLinksInEditor] = useFileLinksOpenInEditor();
   const options = useMemo(
     () => resolveOpenInOptions(navigator.platform, effectiveEditors),
     [effectiveEditors],
@@ -359,6 +362,17 @@ export const OpenInPicker = memo(function OpenInPicker({
             <MenuItem density={presentation === "menu" ? "touch" : "default"} disabled>
               Opens over SSH. Needs your key on {environmentLabel}
             </MenuItem>
+          )}
+          {options.length > 0 && (
+            <>
+              <MenuSeparator />
+              <MenuCheckboxItem
+                checked={openFileLinksInEditor}
+                onCheckedChange={setOpenFileLinksInEditor}
+              >
+                Open file links in editor
+              </MenuCheckboxItem>
+            </>
           )}
         </>
       )}
