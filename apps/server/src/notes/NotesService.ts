@@ -287,43 +287,45 @@ const make = Effect.gen(function* () {
 
   const publish = (key: string) => PubSub.publish(changes, key).pipe(Effect.asVoid);
 
-  const create: NotesService["Service"]["create"] = (input) =>
-    Effect.gen(function* () {
-      const scope = yield* resolveScope(input.scope);
-      const now = DateTime.formatIso(yield* DateTime.now);
-      const base = (input.title === undefined ? "" : slugify(input.title)) || untitledBase(now);
-      const content = input.content ?? (input.title === undefined ? "" : `# ${input.title}\n\n`);
-      const file = yield* claimFile(noteFolderSegments(scope), base, content);
-      const parsed: ParsedNoteId =
-        scope.threadId === undefined
-          ? { kind: "project", key: scope.key, file }
-          : { kind: "thread", key: scope.key, threadId: scope.threadId, file };
-      yield* publish(scope.key);
-      return { note: yield* summarize(parsed, content), content } satisfies NoteDocument;
-    }).pipe(mutations.withPermits(1));
+  const create: NotesService["Service"]["create"] = Effect.fn("NotesService.create")(function* (
+    input,
+  ) {
+    const scope = yield* resolveScope(input.scope);
+    const now = DateTime.formatIso(yield* DateTime.now);
+    const base = (input.title === undefined ? "" : slugify(input.title)) || untitledBase(now);
+    const content = input.content ?? (input.title === undefined ? "" : `# ${input.title}\n\n`);
+    const file = yield* claimFile(noteFolderSegments(scope), base, content);
+    const parsed: ParsedNoteId =
+      scope.threadId === undefined
+        ? { kind: "project", key: scope.key, file }
+        : { kind: "thread", key: scope.key, threadId: scope.threadId, file };
+    yield* publish(scope.key);
+    return { note: yield* summarize(parsed, content), content } satisfies NoteDocument;
+  }, mutations.withPermits(1));
 
-  const write: NotesService["Service"]["write"] = (input) =>
-    Effect.gen(function* () {
-      const parsed = yield* parse(input.id);
-      const current = yield* readParsed(parsed);
-      if (current.note.version !== input.expectedVersion) {
-        return yield* new NoteConflictError({
-          id: input.id,
-          currentVersion: current.note.version,
-        });
-      }
-      const file = yield* absolute(noteFolderSegments(parsed).concat(parsed.file));
-      // Write beside the note, then rename over it, so a crash never leaves half a note.
-      const temporary = `${file}.${noteVersion(input.content)}.tmp`;
-      yield* fileSystem
-        .writeFileString(temporary, input.content)
-        .pipe(
-          Effect.andThen(fileSystem.rename(temporary, file)),
-          Effect.mapError(failure("Failed to save the note.", input.id)),
-        );
-      yield* publish(parsed.key);
-      return yield* summarize(parsed, input.content);
-    }).pipe(mutations.withPermits(1));
+  const write: NotesService["Service"]["write"] = Effect.fn("NotesService.write")(function* (
+    input,
+  ) {
+    const parsed = yield* parse(input.id);
+    const current = yield* readParsed(parsed);
+    if (current.note.version !== input.expectedVersion) {
+      return yield* new NoteConflictError({
+        id: input.id,
+        currentVersion: current.note.version,
+      });
+    }
+    const file = yield* absolute(noteFolderSegments(parsed).concat(parsed.file));
+    // Write beside the note, then rename over it, so a crash never leaves half a note.
+    const temporary = `${file}.${noteVersion(input.content)}.tmp`;
+    yield* fileSystem
+      .writeFileString(temporary, input.content)
+      .pipe(
+        Effect.andThen(fileSystem.rename(temporary, file)),
+        Effect.mapError(failure("Failed to save the note.", input.id)),
+      );
+    yield* publish(parsed.key);
+    return yield* summarize(parsed, input.content);
+  }, mutations.withPermits(1));
 
   /** Moves a note file to `target` folder under a free name built from `base`. */
   const relocate = Effect.fnUntraced(function* (
@@ -347,63 +349,64 @@ const make = Effect.gen(function* () {
     return yield* summarize(next, content);
   });
 
-  const rename: NotesService["Service"]["rename"] = (input) =>
-    Effect.gen(function* () {
-      const parsed = yield* parse(input.id);
-      const current = yield* readParsed(parsed);
-      const base = slugify(input.title) || parsed.file.replace(/\.md$/, "");
-      const content = replaceNoteHeading(current.content, input.title);
-      if (`${base}.md` === parsed.file) {
-        const file = yield* absolute(noteFolderSegments(parsed).concat(parsed.file));
-        yield* fileSystem
-          .writeFileString(file, content)
-          .pipe(Effect.mapError(failure("Failed to rename the note.", input.id)));
-        yield* publish(parsed.key);
-        return yield* summarize(parsed, content);
-      }
-      return yield* relocate(
-        parsed,
-        { key: parsed.key, ...(parsed.kind === "thread" ? { threadId: parsed.threadId } : {}) },
-        base,
-        content,
-      );
-    }).pipe(mutations.withPermits(1));
-
-  const move: NotesService["Service"]["move"] = (input) =>
-    Effect.gen(function* () {
-      const parsed = yield* parse(input.id);
-      const current = yield* readParsed(parsed);
-      const base = parsed.file.replace(/\.md$/, "");
-      if (input.to.kind === "project") {
-        if (parsed.kind === "project") return current.note;
-        return yield* relocate(parsed, { key: parsed.key }, base, current.content);
-      }
-      // A note only moves between a project and that project's own threads.
-      const target = yield* resolveScope({ kind: "thread", threadId: input.to.threadId });
-      if (target.key !== parsed.key) {
-        return yield* new NotesError({
-          message: "The thread belongs to a different project.",
-          id: input.id,
-        });
-      }
-      if (parsed.kind === "thread" && parsed.threadId === input.to.threadId) return current.note;
-      return yield* relocate(parsed, target, base, current.content);
-    }).pipe(mutations.withPermits(1));
-
-  const remove: NotesService["Service"]["delete"] = (id) =>
-    Effect.gen(function* () {
-      const parsed = yield* parse(id);
-      const source = yield* absolute(noteFolderSegments(parsed).concat(parsed.file));
-      const stamp = DateTime.formatIso(yield* DateTime.now).replace(/[:.]/g, "-");
-      const trashFolder = yield* absolute([TRASH_FOLDER, stamp, ...noteFolderSegments(parsed)]);
+  const rename: NotesService["Service"]["rename"] = Effect.fn("NotesService.rename")(function* (
+    input,
+  ) {
+    const parsed = yield* parse(input.id);
+    const current = yield* readParsed(parsed);
+    const base = slugify(input.title) || parsed.file.replace(/\.md$/, "");
+    const content = replaceNoteHeading(current.content, input.title);
+    if (`${base}.md` === parsed.file) {
+      const file = yield* absolute(noteFolderSegments(parsed).concat(parsed.file));
       yield* fileSystem
-        .makeDirectory(trashFolder, { recursive: true })
-        .pipe(
-          Effect.andThen(fileSystem.rename(source, path.join(trashFolder, parsed.file))),
-          Effect.mapError(failure("Failed to delete the note.", id)),
-        );
+        .writeFileString(file, content)
+        .pipe(Effect.mapError(failure("Failed to rename the note.", input.id)));
       yield* publish(parsed.key);
-    }).pipe(mutations.withPermits(1));
+      return yield* summarize(parsed, content);
+    }
+    return yield* relocate(
+      parsed,
+      { key: parsed.key, ...(parsed.kind === "thread" ? { threadId: parsed.threadId } : {}) },
+      base,
+      content,
+    );
+  }, mutations.withPermits(1));
+
+  const move: NotesService["Service"]["move"] = Effect.fn("NotesService.move")(function* (input) {
+    const parsed = yield* parse(input.id);
+    const current = yield* readParsed(parsed);
+    const base = parsed.file.replace(/\.md$/, "");
+    if (input.to.kind === "project") {
+      if (parsed.kind === "project") return current.note;
+      return yield* relocate(parsed, { key: parsed.key }, base, current.content);
+    }
+    // A note only moves between a project and that project's own threads.
+    const target = yield* resolveScope({ kind: "thread", threadId: input.to.threadId });
+    if (target.key !== parsed.key) {
+      return yield* new NotesError({
+        message: "The thread belongs to a different project.",
+        id: input.id,
+      });
+    }
+    if (parsed.kind === "thread" && parsed.threadId === input.to.threadId) return current.note;
+    return yield* relocate(parsed, target, base, current.content);
+  }, mutations.withPermits(1));
+
+  const remove: NotesService["Service"]["delete"] = Effect.fn("NotesService.remove")(function* (
+    id,
+  ) {
+    const parsed = yield* parse(id);
+    const source = yield* absolute(noteFolderSegments(parsed).concat(parsed.file));
+    const stamp = DateTime.formatIso(yield* DateTime.now).replace(/[:.]/g, "-");
+    const trashFolder = yield* absolute([TRASH_FOLDER, stamp, ...noteFolderSegments(parsed)]);
+    yield* fileSystem
+      .makeDirectory(trashFolder, { recursive: true })
+      .pipe(
+        Effect.andThen(fileSystem.rename(source, path.join(trashFolder, parsed.file))),
+        Effect.mapError(failure("Failed to delete the note.", id)),
+      );
+    yield* publish(parsed.key);
+  }, mutations.withPermits(1));
 
   const listDirectory = (segments: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> =>
     absolute(segments).pipe(
@@ -450,14 +453,18 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  const isVisibleToThread: NotesService["Service"]["isVisibleToThread"] = (id, threadId) =>
-    Effect.gen(function* () {
+  const isVisibleToThread: NotesService["Service"]["isVisibleToThread"] = Effect.fn(
+    "NotesService.isVisibleToThread",
+  )(
+    function* (id, threadId) {
       const parsed = parseNoteId(id);
       if (parsed === null) return false;
       if (parsed.kind === "thread" && parsed.threadId !== threadId) return false;
       const scope = yield* resolveScope({ kind: "thread", threadId });
       return scope.key === parsed.key;
-    }).pipe(Effect.orElseSucceed(() => false));
+    },
+    Effect.orElseSucceed(() => false),
+  );
 
   return NotesService.of({
     list,

@@ -43,7 +43,7 @@ const withNotes = <A, E>(
                 Option.some({ repositoryKey: id === projectId ? key : "other/repo" }),
               ),
             )
-          : Effect.succeed(Option.none()),
+          : Effect.succeedNone,
       thread: (id) =>
         Effect.succeed(
           id === threadId || id === siblingThreadId

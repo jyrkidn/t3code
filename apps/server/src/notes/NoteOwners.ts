@@ -31,7 +31,7 @@ const make = Effect.gen(function* () {
   const projects = yield* ProjectService.ProjectService;
   const threads = yield* ThreadManagementService.ThreadManagementService;
   return NoteOwners.of({
-    project: (projectId) =>
+    project: Effect.fn("NoteOwners.project")((projectId) =>
       projects.getShell(projectId).pipe(
         Effect.map(
           Option.map((shell) => ({
@@ -41,13 +41,15 @@ const make = Effect.gen(function* () {
         // A lookup failure files nothing; the caller reports the project as missing.
         Effect.orElseSucceed(() => Option.none()),
       ),
-    thread: (threadId) =>
+    ),
+    thread: Effect.fn("NoteOwners.thread")((threadId) =>
       threads.getThreadShell(threadId).pipe(
         Effect.map((shell) =>
           shell === null ? Option.none() : Option.some({ projectId: shell.projectId }),
         ),
         Effect.orElseSucceed(() => Option.none()),
       ),
+    ),
   });
 });
 

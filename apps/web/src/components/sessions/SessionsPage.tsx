@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react";
 import {
   scopedProjectKey,
   scopeProjectRef,
@@ -26,10 +27,10 @@ import {
 } from "react";
 
 import { isElectron } from "../../env";
+import { canShareWithGuestAtom } from "../chat/guestShareAvailability";
 import { useThreadActionMenu } from "../../hooks/useThreadActionMenu";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useClientSettings } from "../../hooks/useSettings";
-import { useEscapeToGoBack } from "../../hooks/useNavigateBack";
 import { buildProjectGroups, selectProjectGroupingSettings } from "../../logicalProject";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { useProjects, useThreadShells } from "../../state/entities";
@@ -113,7 +114,6 @@ export function SessionsPage({
   readonly search: SessionsSearch;
   readonly onSearchChange: (next: SessionsSearchPatch) => void;
 }) {
-  useEscapeToGoBack();
   const now = useMinuteClock();
   const threads = useThreadShells();
   const projects = useProjects();
@@ -184,9 +184,13 @@ export function SessionsPage({
     readonly position: { x: number; y: number };
   } | null>(null);
   const navigate = useNavigate();
+  const canShareWithGuest = useAtomValue(
+    canShareWithGuestAtom(menuRequest?.ref.environmentId ?? ("" as EnvironmentId)),
+  );
   const { openMenu } = useThreadActionMenu({
     threadRef: menuRequest?.ref ?? null,
     projectCwd: null,
+    canShareWithGuest,
     onStartRename: () => {
       if (menuRequest === null) return;
       void navigate({
