@@ -2,9 +2,14 @@ import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environ
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { NoteScopeInput, NoteSummary, ScopedProjectRef } from "@t3tools/contracts";
 import { NotebookPenIcon, NotebookTextIcon } from "lucide-react";
-import { useCallback } from "react";
+import { useRouter } from "@tanstack/react-router";
+import { useEffect } from "react";
 
+import { useStableCallback } from "../../hooks/useStableCallback";
 import { useRightPanelStore } from "../../rightPanelStore";
+import { registerCommands } from "../../shortcuts/dispatcher";
+import { readThreadShell } from "../../state/entities";
+import { resolveThreadRouteTarget } from "../../threadRoutes";
 import { notesEnvironment, useEnvironmentSupportsNotes } from "../../state/notes";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -25,9 +30,9 @@ function openNotesPanel(thread: NonNullable<ActiveThread>, noteId: string, tab: 
  * New scratch note: in the active thread when there is one, otherwise in the
  * fallback project, and opened in the thread's notes panel when it can be.
  */
-export function useCreateScratchNote() {
+function useCreateScratchNote() {
   const createNote = useAtomCommand(notesEnvironment.create, { reportFailure: false });
-  return useCallback(
+  return useStableCallback(
     async (input: {
       readonly activeThread: ActiveThread;
       readonly fallbackProjectRef: ScopedProjectRef | null;
@@ -75,7 +80,29 @@ export function useCreateScratchNote() {
         });
       }
     },
-    [createNote],
+  );
+}
+
+/** The `notes.new` shortcut, live wherever the app shell is mounted. */
+export function useNotesNewShortcut() {
+  const router = useRouter();
+  const createScratchNote = useCreateScratchNote();
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- registers a global keyboard command for the shell's lifetime
+  useEffect(
+    () =>
+      registerCommands({
+        "notes.new": (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.repeat) return;
+          const target = resolveThreadRouteTarget(router.state.matches.at(-1)?.params ?? {});
+          void createScratchNote({
+            activeThread: target?.kind === "server" ? readThreadShell(target.threadRef) : null,
+            fallbackProjectRef: null,
+          });
+        },
+      }),
+    [router, createScratchNote],
   );
 }
 

@@ -5,6 +5,10 @@ import {
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
 import {
+  buildProjectGroups,
+  selectProjectGroupingSettings,
+} from "@t3tools/client-runtime/state/project-grouping";
+import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
@@ -15,23 +19,13 @@ import {
 } from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArchiveIcon, EllipsisIcon, NotebookTextIcon, SquareIcon } from "lucide-react";
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useState,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
+import { memo, useEffect, useEffectEvent, useState, type MouseEvent, type ReactNode } from "react";
 
 import { isElectron } from "../../env";
 import { canShareWithGuestAtom } from "../chat/guestShareAvailability";
 import { useThreadActionMenu } from "../../hooks/useThreadActionMenu";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useClientSettings } from "../../hooks/useSettings";
-import { buildProjectGroups, selectProjectGroupingSettings } from "../../logicalProject";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { useProjects, useThreadShells } from "../../state/entities";
 import { useEnvironments, usePrimaryEnvironmentId } from "../../state/environments";
@@ -85,6 +79,7 @@ const ALL = "__all__";
 /** Re-evaluates time-based state (snooze wakes, limit resets, relative labels) once a minute. */
 function useMinuteClock(): string {
   const [now, setNow] = useState(() => new Date().toISOString());
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a minute timer while the page is mounted
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date().toISOString()), 60_000);
     return () => window.clearInterval(id);
@@ -121,56 +116,41 @@ export function SessionsPage({
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const groupingSettings = useClientSettings(selectProjectGroupingSettings);
 
-  const projectGroupByRef = useMemo(() => {
-    const groups = buildProjectGroups({
-      projects,
-      settings: groupingSettings,
-      preferredEnvironmentId: primaryEnvironmentId,
-    });
-    const map = new Map<string, ProjectOption>();
-    for (const group of groups) {
-      for (const ref of group.memberProjectRefs) {
-        map.set(scopedProjectKey(ref), { key: group.key, label: group.label });
-      }
+  const projectGroupByRef = new Map<string, ProjectOption>();
+  for (const group of buildProjectGroups({
+    projects,
+    settings: groupingSettings,
+    preferredEnvironmentId: primaryEnvironmentId,
+  })) {
+    for (const ref of group.memberProjectRefs) {
+      projectGroupByRef.set(scopedProjectKey(ref), { key: group.key, label: group.label });
     }
-    return map;
-  }, [groupingSettings, primaryEnvironmentId, projects]);
+  }
 
-  const environmentLabelById = useMemo(
-    () =>
-      new Map(environments.map((environment) => [environment.environmentId, environment.label])),
-    [environments],
+  const environmentLabelById = new Map(
+    environments.map((environment) => [environment.environmentId, environment.label]),
   );
 
-  const projectOf = useCallback(
-    (thread: SidebarThreadSummary) =>
-      projectGroupByRef.get(
-        scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
-      ) ?? null,
-    [projectGroupByRef],
-  );
+  const projectOf = (thread: SidebarThreadSummary) =>
+    projectGroupByRef.get(
+      scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+    ) ?? null;
 
-  const filtered = useMemo(
-    () =>
-      threads.filter(
-        (thread) =>
-          (search.environmentId === undefined || thread.environmentId === search.environmentId) &&
-          (search.project === undefined || projectOf(thread)?.key === search.project),
-      ),
-    [projectOf, search.environmentId, search.project, threads],
+  const filtered = threads.filter(
+    (thread) =>
+      (search.environmentId === undefined || thread.environmentId === search.environmentId) &&
+      (search.project === undefined || projectOf(thread)?.key === search.project),
   );
-  const groups = useMemo(() => groupSessions(filtered, now), [filtered, now]);
+  const groups = groupSessions(filtered, now);
 
-  const projectOptions = useMemo(() => {
-    const options = new Map<string, string>();
-    for (const thread of threads) {
-      const project = projectOf(thread);
-      if (project) options.set(project.key, project.label);
-    }
-    return [...options]
-      .map(([key, label]) => ({ key, label }))
-      .toSorted((left, right) => left.label.localeCompare(right.label));
-  }, [projectOf, threads]);
+  const projectOptionLabels = new Map<string, string>();
+  for (const thread of threads) {
+    const project = projectOf(thread);
+    if (project) projectOptionLabels.set(project.key, project.label);
+  }
+  const projectOptions = [...projectOptionLabels]
+    .map(([key, label]) => ({ key, label }))
+    .toSorted((left, right) => left.label.localeCompare(right.label));
 
   const status = search.status ?? "all";
   const visibleBands = BANDS.filter((band) =>
@@ -206,39 +186,34 @@ export function SessionsPage({
   const openRequestedMenu = useEffectEvent((position: { x: number; y: number }) =>
     openMenu(position),
   );
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opens the imperative native context menu once it targets the requested thread
   useEffect(() => {
     if (menuRequest !== null) openRequestedMenu(menuRequest.position);
   }, [menuRequest]);
 
-  const onOpenMenu = useCallback((ref: ScopedThreadRef, position: { x: number; y: number }) => {
+  const onOpenMenu = (ref: ScopedThreadRef, position: { x: number; y: number }) => {
     setMenuRequest({ ref, position });
-  }, []);
+  };
 
   const { settleThread } = useThreadActions();
   const interruptTurn = useOrchestrationCommand(threadEnvironment.interruptTurn, {
     reportFailure: false,
   });
-  const onSettle = useCallback(
-    async (ref: ScopedThreadRef) => {
-      const result = await settleThread(ref);
-      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-        failureToast("Failed to settle thread", squashAtomCommandFailure(result));
-      }
-    },
-    [settleThread],
-  );
-  const onStop = useCallback(
-    async (ref: ScopedThreadRef) => {
-      const result = await interruptTurn({
-        environmentId: ref.environmentId,
-        input: { threadId: ref.threadId },
-      });
-      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-        failureToast("Failed to stop thread", squashAtomCommandFailure(result));
-      }
-    },
-    [interruptTurn],
-  );
+  const onSettle = async (ref: ScopedThreadRef) => {
+    const result = await settleThread(ref);
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      failureToast("Failed to settle thread", squashAtomCommandFailure(result));
+    }
+  };
+  const onStop = async (ref: ScopedThreadRef) => {
+    const result = await interruptTurn({
+      environmentId: ref.environmentId,
+      input: { threadId: ref.threadId },
+    });
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      failureToast("Failed to stop thread", squashAtomCommandFailure(result));
+    }
+  };
 
   const filterSelect = (input: {
     label: string;
@@ -382,10 +357,7 @@ const SessionRow = memo(function SessionRow({
   readonly onSettle: (ref: ScopedThreadRef) => Promise<void>;
   readonly onStop: (ref: ScopedThreadRef) => Promise<void>;
 }) {
-  const ref = useMemo(
-    () => scopeThreadRef(thread.environmentId, thread.id),
-    [thread.environmentId, thread.id],
-  );
+  const ref = scopeThreadRef(thread.environmentId, thread.id);
   const attention = resolveSessionAttention(thread, now);
   const attentionLabel = attention === null ? null : (ATTENTION_LABEL[attention] ?? null);
   const lastActivity = formatRelativeTimeLabel(sessionLastActivityAt(thread));
